@@ -2,7 +2,8 @@ const express               = require("express"),
       bodyParser            = require("body-parser"),
       mongoose              = require("mongoose"),
       passport              = require("passport"),
-      localStrategy         = require("passport-local")
+      localStrategy         = require("passport-local"),
+      //passport-local-mongoose helps with hashing and unhasing of passwords when users sign up
       passportLocalMongoose = require("passport-local-mongoose"),
       User                  = require("./models/user");
       
@@ -18,14 +19,17 @@ app.use(express.static(__dirname + "/public"));
 app.use(bodyParser.urlencoded({extended: true}));
 
 //Using express-session at the same time as requiring it
+//secret value will be used to decode the session information
 app.use(require("express-session")({
     secret: "Code better N8",
+    //The following 2 are required - otherwise you get an error when running the app
     resave: false,
     saveUninitialized: false
 }));
 
 
 //Initializing express to use passport and session
+//Needed anytime we want to run passport in our app
 app.use(passport.initialize());
 app.use(passport.session());
 
@@ -39,6 +43,7 @@ app.use(function (req, res, next) {
 /*We're telling passport to use a localStrategy method called authenticate(), which comes from
 passportLocalMongoose in user.js */
 passport.use(new localStrategy(User.authenticate()));
+
 /*
   The following methods are responsible for reading the session,
   taking the encoded data from the session, unencoding it with deserialize
@@ -49,7 +54,7 @@ passport.deserializeUser(User.deserializeUser());
 
 //Our own MiddleWare
 function isLoggedIn(req, res, next) {
-    //isAuthenticated() is a method from passport package
+    //isAuthenticated() is a method from the passport package
     //We're going to use this middleware on the /secret route
     //We only want users to access that page if they are logged in
     if(req.isAuthenticated()) {
@@ -57,6 +62,13 @@ function isLoggedIn(req, res, next) {
         return next();
     }
     res.redirect("/login");
+}
+
+function isLoggedOut(req, res, next) {
+    if(!req.isAuthenticated()) {
+        return next();
+    }
+    res.redirect("/");
 }
 
 
@@ -77,7 +89,7 @@ app.get("/secret", isLoggedIn, (req, res) => {
 //=================
 
 //Show user signup form 
-app.get("/register", (req, res) => {
+app.get("/register", isLoggedOut, (req, res) => {
     res.render("register");
 });
 
@@ -85,13 +97,14 @@ app.get("/register", (req, res) => {
 app.post("/register", (req, res) => {
 /*We register a new User with their username in the constructor. We send the password as a separate argument
 because that will allow it to be hashed. We don't want to store passwords in the database.
-Then, if there's an error, we redirect the user to the register page again.
-But if no error, we locally authenticate the user and redirect them to the secret page.*/    
+*/    
     User.register(new User({username: req.body.username}), req.body.password, (err, user) => {
+        //Then, if there's an error, we redirect the user to the register page again.
         if(err) {
             console.log(err);
-            res.render("register");
+            return res.render("register");
         } else {
+            //But if no error, we locally authenticate the user and redirect them to the secret page.
             passport.authenticate("local")(req, res, () => {
                 res.redirect("/secret");
             })
@@ -103,7 +116,7 @@ But if no error, we locally authenticate the user and redirect them to the secre
 //LOGIN ROUTES
 //=================
 //Render login form
-app.get("/login", (req, res) => {
+app.get("/login", isLoggedOut, (req, res) => {
     res.render("login");
 });
 
